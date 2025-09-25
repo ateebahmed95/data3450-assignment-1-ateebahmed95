@@ -17,7 +17,9 @@ def age_splitter(df, col_name, age_threshold):
         - df_below: DataFrame with rows where age is below the threshold.
         - df_above_equal: DataFrame with rows where age is above or equal to the threshold.
     """
-    pass
+    df_below = df[df[col_name] < age_threshold]
+    df_above_equal = df[df[col_name] >= age_threshold]
+    return df_below, df_above_equal
     
 def effectSizer(df, num_col, cat_col):
     """
@@ -33,20 +35,86 @@ def effectSizer(df, num_col, cat_col):
     Raises:
     ValueError: If the categorical column does not have exactly two unique values.
     """
-    pass
+    # Clean the categorical column
+    df[cat_col] = df[cat_col].astype(str).str.strip()
+
+    # Get unique values
+    values = df[cat_col].dropna().unique()
+    if len(values) != 2:
+        raise ValueError(f"{cat_col} must have exactly 2 unique values, found: {values}")
+
+    # Split numerical column into two groups
+    g1 = df[df[cat_col] == values[0]][num_col]
+    g2 = df[df[cat_col] == values[1]][num_col]
+
+    # Calculate Cohen's d
+    mean_diff = g1.mean() - g2.mean()
+    pooled_std = np.sqrt((g1.std()**2 + g2.std()**2) / 2)
+
+    if pooled_std == 0 or np.isnan(pooled_std):
+        return 0
+
+    return mean_diff / pooled_std
+
 
 def cohenEffectSize(group1, group2):
     # You need to implement this helper function
     # This should not be too hard...
-    pass
+
+    group1, group2 = group1.dropna(), group2.dropna()
+    if group1.empty or group2.empty:
+        return np.nan
+    
+    mean_diff = group1.mean() - group2.mean()
+    pooled_std = np.sqrt(((group1.std() ** 2) + (group2.std() ** 2)) / 2)
+    
+    if pooled_std == 0:
+        return 0.0  
+    
+    return mean_diff / pooled_std
+
 
 def cohortCompare(df, cohorts, statistics=['mean', 'median', 'std', 'min', 'max']):
     """
     This function takes a dataframe and a list of cohort column names, and returns a dictionary
     where each key is a cohort name and each value is an object containing the specified statistics
     """
-    pass
-  
+    results = {}
+
+    numeric_cols = df.select_dtypes(include='number').columns
+    categorical_cols = [col for col in df.columns if col not in numeric_cols]
+
+    for cohort_col in cohorts:
+        for cohort_value in df[cohort_col].unique():
+            cohort_df = df[df[cohort_col] == cohort_value]
+            metric = CohortMetric(f"{cohort_col}={cohort_value}")
+
+            # Numeric stats
+            stats_dict = {}
+            for num_col in numeric_cols:
+                series = cohort_df[num_col]
+                stats_dict[num_col] = {}
+                if 'mean' in statistics:
+                    stats_dict[num_col]['mean'] = series.mean()
+                if 'median' in statistics:
+                    stats_dict[num_col]['median'] = series.median()
+                if 'std' in statistics:
+                    stats_dict[num_col]['std'] = series.std()
+                if 'min' in statistics:
+                    stats_dict[num_col]['min'] = series.min()
+                if 'max' in statistics:
+                    stats_dict[num_col]['max'] = series.max()
+            metric.statistics["numeric_stats"] = stats_dict
+
+            # Categorical counts
+            counts = {}
+            for cat_col in categorical_cols:
+                counts[cat_col] = cohort_df[cat_col].value_counts().to_dict()
+            metric.statistics["counts"] = counts
+
+            results[f"{cohort_col}={cohort_value}"] = metric
+
+    return results
 
 class CohortMetric():
     # don't change this
